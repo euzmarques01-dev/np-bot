@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel Senado</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Roboto',sans-serif;}
+body{background:radial-gradient(circle at top,#1e293b,#020617 70%);color:#fff;display:flex;justify-content:center;padding:10px;}
+.painel{width:100%;max-width:960px;background:linear-gradient(145deg,#0b122e,#020617);border-radius:24px;padding:18px;box-shadow:0 30px 80px rgba(0,0,0,.85);}
+.topo{text-align:center;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:10px;}
+.topo h1{margin:0;font-size:clamp(18px,4vw,30px);}
+.resumo{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0;}
+.card{background:rgba(255,255,255,.08);border-radius:16px;padding:12px;text-align:center;transition:0.3s;box-shadow:0 5px 15px rgba(0,0,0,.4);}
+.card h2{margin:0;font-size:30px;}
+.verde{color:#22c55e;}
+.vermelho{color:#ef4444;}
+.branco{color:#e5e7eb;}
+.laranja{color:#f59e0b;}
+.lista{display:grid;gap:8px;margin-top:12px;}
+.item{background:rgba(255,255,255,.08);padding:10px;border-radius:14px;}
+.botao-voto{width:32%;padding:12px;margin:6px;border-radius:12px;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 5px 15px rgba(0,0,0,.4);transition:0.2s;}
+.botao-verde{background:#22c55e;color:#fff;}
+.botao-vermelho{background:#ef4444;color:#fff;}
+.botao-branco{background:#e5e7eb;color:#111;}
+.botao-voto:active{transform:translateY(2px);box-shadow:0 2px 6px rgba(0,0,0,.4);}
+.adminPanel{display:none;margin-top:14px;background:rgba(255,255,255,.05);padding:14px;border-radius:18px;}
+input,button,select{width:100%;padding:10px;border-radius:10px;border:none;margin-top:6px;font-family:'Roboto',sans-serif;}
+button{cursor:pointer;font-weight:bold;}
+.comprovante{background:#fff;color:#000;padding:12px;border-radius:8px;margin-top:10px;font-family:monospace;}
+#fundadorBtn{display:inline-block;cursor:pointer;color:#ccc;background:#555;padding:4px 8px;border-radius:4px;}
+#btnAprovado,#btnReprovado,#btnNormal,#btnZerarVotos{padding:12px;margin-top:10px;border-radius:12px;font-weight:700;font-size:16px;cursor:pointer;transition:0.2s;border:none;}
+#btnAprovado{background:#22c55e;color:#fff;}
+#btnReprovado{background:#ef4444;color:#fff;}
+#btnNormal{background:#fff;color:#111;}
+#btnZerarVotos{background:#000;color:#fff;}
+</style>
+</head>
+<body>
+<div class="painel">
+
+<div class="topo">
+<h1 id="titulo">PL Nº 071/2025 — Reforma Política</h1>
+</div>
+
+<div class="resumo">
+<div class="card verde"><h2 id="favor">0</h2>A FAVOR</div>
+<div class="card vermelho"><h2 id="contra">0</h2>CONTRA</div>
+<div class="card branco"><h2 id="abst">0</h2>ABST.</div>
+<div class="card laranja"><h2 id="falta">0</h2>FALTAM</div>
+</div>
+
+<div style="display:flex;justify-content:center;">
+<button class="botao-voto botao-verde" id="btnFavor">A FAVOR</button>
+<button class="botao-voto botao-vermelho" id="btnContra">CONTRA</button>
+<button class="botao-voto botao-branco" id="btnAbst">ABSTENÇÃO</button>
+</div>
+
+<div class="lista" id="lista"></div>
+
+<p style="margin-top:20px;">Desenvolvedor <span id="fundadorBtn">Musonhor</span></p>
+
+<div class="adminPanel" id="adminPanel">
+<h3>👑 CONTROLE DO FUNDADOR</h3>
+<input id="novoTitulo" placeholder="Título do Projeto">
+<input id="numSenadores" type="number" placeholder="Número de Parlamentares" min="1" max="513">
+<button id="btnSalvarConfig">Salvar Configuração</button>
+
+<hr>
+<h4>➕ Criar Parlamentar</h4>
+<input id="pNome" placeholder="Nome do Parlamentar">
+<input id="pCodigo" placeholder="Código 3 dígitos">
+<button id="btnCriarParlamentar">Criar</button>
+
+<hr>
+<h4>🪑 Criar Bancada</h4>
+<input id="bNome" placeholder="Nome da Bancada">
+<input id="bTotal" type="number" placeholder="Total de Parlamentares" min="1">
+<button id="btnCriarBancada">Criar Bancada</button>
+<div id="listaBancadas"></div>
+
+<hr>
+<div id="editor"></div>
+<hr>
+<button id="btnZerarVotos">🧹 ZERAR VOTOS</button>
+<button id="btnAprovado">APROVADO</button>
+<button id="btnReprovado">REPROVADO</button>
+<button id="btnNormal">NORMAL</button>
+
+<hr>
+<button id="btnReset">🔄 RESETAR TUDO</button>
+<h4>🧾 HISTÓRICO DE VOTOS</h4>
+<div id="historico"></div>
+</div>
+
+<div id="comprovante"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.2.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.2.0/firebase-database.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.2.0/firebase-analytics.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBYcoMy0DmO4h1p9GKEmRgWfm7qGLaOBlA",
+  authDomain: "senado-painel.firebaseapp.com",
+  projectId: "senado-painel",
+  storageBucket: "senado-painel.firebasestorage.app",
+  messagingSenderId: "87043119206",
+  appId: "1:87043119206:web:68e42f7d5a7c5df769f5a7",
+  measurementId: "G-VQPWP4VSE8"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const db = getDatabase(app);
+
+let parlamentares = [];
+let bancadas = [];
+let config = {titulo:"PL Nº 071/2025 — Reforma Política", total:81, resultado:null};
+let historico = [];
+let removidos = [];
+
+const titulo = document.getElementById("titulo");
+const favor = document.getElementById("favor");
+const contra = document.getElementById("contra");
+const abst = document.getElementById("abst");
+const falta = document.getElementById("falta");
+const lista = document.getElementById("lista");
+const editor = document.getElementById("editor");
+const historicoDiv = document.getElementById("historico");
+const comprovante = document.getElementById("comprovante");
+const adminPanel = document.getElementById("adminPanel");
+const fundadorBtn = document.getElementById("fundadorBtn");
+
+function salvar(){set(ref(db,'senado'),{parlamentares,bancadas,config,historico});}
+
+onValue(ref(db,'senado'),snap=>{
+  const dados = snap.val();
+  if(dados){
+    parlamentares = dados.parlamentares||[];
+    bancadas = dados.bancadas||[];
+    config = dados.config||config;
+    historico = dados.historico||[];
+    titulo.textContent = config.titulo;
+    atualizarTituloResultado();
+    render();
+    renderEditor();
+    renderHistorico();
+    renderBancadas();
+  }
+});
+
+function render(){
+  let f=0,c=0,a=0;
+  lista.innerHTML="";
+
+  bancadas.forEach(b=>{
+    if(b.voto){
+      if(b.voto==="favor") f+=b.total;
+      if(b.voto==="contra") c+=b.total;
+      if(b.voto==="abst") a+=b.total;
+      lista.innerHTML+=`<div class="item">Bancada ${b.nome} — Voto: ${b.voto.toUpperCase()} — Total: ${b.total}</div>`;
+    }
+  });
+
+  parlamentares.forEach(p=>{
+    if(p.voto==="favor") f++;
+    if(p.voto==="contra") c++;
+    if(p.voto==="abst") a++;
+    lista.innerHTML+=`<div class="item">${p.nome} — Voto: ${p.voto? p.voto.toUpperCase():"PENDENTE"}</div>`;
+  });
+
+  favor.textContent=f;
+  contra.textContent=c;
+  abst.textContent=a;
+  falta.textContent=config.total - (f+c+a);
+}
+
+fundadorBtn.onclick = ()=>{
+  let senha = prompt("Digite a senha do fundador:");
+  if(senha==="2010") adminPanel.style.display="block";
+}
+
+// Render Editor com bloqueio seguro e botão de desfazer
+function renderEditor(){
+  editor.innerHTML="";
+  const isFundador = adminPanel.style.display === "block";
+
+  parlamentares.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className="item";
+    div.innerHTML=`${p.nome} — Código: ${p.codigo} — Voto: ${p.voto||"PENDENTE"}${p.bloqueado?' — BLOQUEADO':''}`;
+
+    if(isFundador){
+      const btnApagar = document.createElement('button');
+      btnApagar.textContent="Apagar";
+      btnApagar.onclick = ()=>{
+        if(confirm(`Tem certeza que deseja apagar o parlamentar ${p.nome}?`)){
+          apagarParlamentar(p.codigo);
+        }
+      };
+      div.appendChild(btnApagar);
+
+      const btnBloquear = document.createElement('button');
+      btnBloquear.textContent = p.bloqueado ? "Desbloquear" : "Bloquear";
+      btnBloquear.onclick = ()=>{bloquearParlamentar(p.codigo)};
+      div.appendChild(btnBloquear);
+    }
+
+    editor.appendChild(div);
+  });
+
+  if(isFundador && removidos.length > 0){
+    const btnDesfazer = document.createElement('button');
+    btnDesfazer.textContent = "Desfazer Último Apagar";
+    btnDesfazer.onclick = ()=>{
+      const restaurar = removidos.pop();
+      if(restaurar){
+        parlamentares.push(restaurar);
+        salvar();
+        render();
+        renderEditor();
+      }
+    };
+    editor.appendChild(btnDesfazer);
+  }
+}
+
+function apagarParlamentar(codigo){
+  if(adminPanel.style.display !== "block") return alert("Acesso negado!");
+  const p = parlamentares.find(p=>p.codigo===codigo);
+  if(p) removidos.push(p);
+  parlamentares = parlamentares.filter(p=>p.codigo !== codigo);
+  salvar();
+  render();
+  renderEditor();
+}
+
+function bloquearParlamentar(codigo){
+  if(adminPanel.style.display !== "block") return alert("Acesso negado!");
+  const p = parlamentares.find(p=>p.codigo===codigo);
+  if(p) p.bloqueado = !p.bloqueado;
+  salvar();
+  render();
+  renderEditor();
+}
+
+function renderBancadas(){
+  const listaB = document.getElementById("listaBancadas");
+  listaB.innerHTML="";
+  bancadas.forEach((b,i)=>{
+    listaB.innerHTML+=`<div class="item">Bancada: ${b.nome} — Total: ${b.total} 
+    <button onclick="apagarBancada(${i})">Apagar</button>
+    <button onclick="votarBancada(${i},'favor')">A Favor</button>
+    <button onclick="votarBancada(${i},'contra')">Contra</button>
+    <button onclick="votarBancada(${i},'abst')">Abst.</button>
+    </div>`;
+  });
+}
+
+window.apagarBancada=(i)=>{bancadas.splice(i,1);salvar();render();renderBancadas();}
+window.votarBancada=(i,tipo)=>{bancadas[i].voto=tipo; historico.push(`Bancada: ${bancadas[i].nome} | Projeto: ${config.titulo} | Voto: ${tipo.toUpperCase()} | Data: ${new Date().toLocaleString()}`); salvar(); render(); renderBancadas();}
+
+document.getElementById("btnCriarParlamentar").onclick=()=>{
+  const nome = document.getElementById("pNome").value.trim();
+  const codigo = document.getElementById("pCodigo").value.trim();
+  if(!nome || !codigo) return alert("Preencha nome e código!");
+  parlamentares.push({nome,codigo,voto:null,bloqueado:false});
+  salvar();
+  renderEditor();
+}
+
+document.getElementById("btnCriarBancada").onclick=()=>{
+  const nome = document.getElementById("bNome").value.trim();
+  const total = parseInt(document.getElementById("bTotal").value);
+  if(!nome || !total) return alert("Preencha nome e total!");
+  bancadas.push({nome,total});
+  salvar();
+  renderBancadas();
+}
+
+document.getElementById("btnSalvarConfig").onclick=()=>{
+  const t = document.getElementById("novoTitulo").value.trim();
+  const n = parseInt(document.getElementById("numSenadores").value);
+  if(t) config.titulo=t;
+  if(n) config.total=n;
+  salvar();
+}
+
+document.getElementById("btnReset").onclick=()=>{
+  if(confirm("Resetar tudo?")){
+    parlamentares=[];bancadas=[];historico=[];removidos=[];config={titulo:"PL Nº 071/2025 — Reforma Política",total:81,resultado:null};
+    salvar(); render(); renderEditor(); renderHistorico(); renderBancadas(); atualizarTituloResultado();
+  }
+}
+
+async function votar(tipo){
+  const codigo = prompt("Digite seu código de parlamentar:");
+  const p = parlamentares.find(x=>x.codigo===codigo);
+  if(!p) return alert("Código inválido!");
+  if(p.bloqueado) return alert("Parlamentar bloqueado!");
+  if(p.voto) return alert("Você já votou neste projeto!");
+  p.voto = tipo;
+
+  historico.push(`Parlamentar: ${p.nome} | Projeto: ${config.titulo} | Voto: ${tipo.toUpperCase()} | Data: ${new Date().toLocaleString()}`);
+  comprovante.innerHTML=`<div class="comprovante">
+  COMPROVANTE DE VOTO<br>
+  Parlamentar: ${p.nome}<br>
+  Projeto: ${config.titulo}<br>
+  Voto: ${tipo.toUpperCase()}<br>
+  Data/Hora: ${new Date().toLocaleString()}
+  </div>`;
+  
+  salvar();
+  render();
+  renderEditor();
+}
+
+function renderHistorico(){
+  historicoDiv.innerHTML="";
+  historico.forEach(h=>{
+    historicoDiv.innerHTML+=`<div class="item">${h}</div>`;
+  });
+}
+
+document.getElementById("btnFavor").onclick=()=>votar("favor");
+document.getElementById("btnContra").onclick=()=>votar("contra");
+document.getElementById("btnAbst").onclick=()=>votar("abst");
+
+function atualizarTituloResultado(){
+  if(config.resultado==="aprovado"){
+    titulo.style.animation="piscar 1s infinite";
+    titulo.style.color="#22c55e";
+  } else if(config.resultado==="reprovado"){
+    titulo.style.animation="piscar 1s infinite";
+    titulo.style.color="#ef4444";
+  } else {
+    titulo.style.animation="";
+    titulo.style.color="#fff";
+  }
+}
+
+document.getElementById("btnAprovado").onclick=()=>{config.resultado="aprovado"; salvar(); atualizarTituloResultado();}
+document.getElementById("btnReprovado").onclick=()=>{config.resultado="reprovado"; salvar(); atualizarTituloResultado();}
+document.getElementById("btnNormal").onclick=()=>{config.resultado=null; salvar(); atualizarTituloResultado();}
+document.getElementById("btnZerarVotos").onclick=()=>{
+  parlamentares.forEach(p=>p.voto=null);
+  bancadas.forEach(b=>b.voto=null);
+  salvar();
+  render();
+  renderEditor();
+  renderBancadas();
+}
+</script>
+
+<style>
+@keyframes piscar{0%{opacity:1}50%{opacity:0.3}100%{opacity:1}}
+</style>
+</body>
+</html>
